@@ -107,12 +107,12 @@ export let generate = async (model, opts) => {
       extData = new Map([...extData, ...data])
     }
   }
-  // Attach Excel workbook data to directData entries by tag name.
+  // Attach Excel workbook data to directData entries by file name.
   let directData = new Map()
   if (spec.directData) {
-    for (let [tag, xlsxFilename] of Object.entries(spec.directData)) {
+    for (let [file, xlsxFilename] of Object.entries(spec.directData)) {
       let pathname = path.join(modelDirname, xlsxFilename)
-      directData.set(tag, readXlsx(pathname))
+      directData.set(file, readXlsx(pathname))
     }
   }
   // Produce a runnable model with the "genc" and "preprocess" options.

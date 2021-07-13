@@ -28,6 +28,7 @@ import {
   listConcat,
   newTmpVarName,
   permutationsOf,
+  readCsv,
   strToConst,
   vlog
 } from './Helpers.js'
@@ -330,24 +331,41 @@ export default class EquationGen extends ModelReader {
     // If direct data exists for this variable, copy it from the workbook into one or more lookups.
     let result = []
     if (this.mode === 'init-lookups') {
-      let { tag, sheetName, timeRowOrCol, startCell } = this.var.directDataArgs
-      let workbook = this.directData.get(tag)
-      if (workbook) {
-        let sheet = workbook.Sheets[sheetName]
-        if (sheet) {
-          let indexNum = 0
-          if (!R.isEmpty(this.var.subscripts)) {
-            // Generate a lookup for a separated index in the variable's dimension.
-            // TODO allow the index to be in either position of a 2D subscript
-            let ind = sub(this.var.subscripts[0])
-            indexNum = ind.value
+      let getCellValue
+      let { file, tab, timeRowOrCol, startCell } = this.var.directDataArgs
+      if (file.startsWith('?')) {
+        // The file is a tag for an Excel file with data in the directData map.
+        let workbook = this.directData.get(file)
+        if (workbook) {
+          let sheet = workbook.Sheets[tab]
+          if (sheet) {
+            getCellValue = (c, r) => {
+              let cell = sheet[XLSX.utils.encode_cell({ c, r })]
+              return cell != null ? cdbl(cell.v) : null
+            }
+          } else {
+            throw new Error(`ERROR: Direct data worksheet ${tab} tagged ${file} not found`)
           }
-          result.push(this.generateDirectDataLookup(sheet, timeRowOrCol, startCell, indexNum))
         } else {
-          throw new Error(`ERROR: Direct data worksheet ${sheetName} tagged ${tag} not found`)
+          throw new Error(`ERROR: Direct data workbook tagged ${file} not found`)
         }
       } else {
-        throw new Error(`ERROR: Direct data workbook tagged ${tag} not found`)
+        // The file is a CSV pathname. Read it now.
+        let data = readCsv(file, tab)
+        if (data) {
+          getCellValue = (c, r) => (data[r] != null ? cdbl(data[r][c]) : null)
+        }
+      }
+      // If the data was found, convert it to a lookup.
+      if (getCellValue) {
+        let indexNum = 0
+        if (!R.isEmpty(this.var.subscripts)) {
+          // Generate a lookup for a separated index in the variable's dimension.
+          // TODO allow the index to be in either position of a 2D subscript
+          let ind = sub(this.var.subscripts[0])
+          indexNum = ind.value
+        }
+        result.push(this.generateDirectDataLookup(getCellValue, timeRowOrCol, startCell, indexNum))
       }
     }
     return result
@@ -368,7 +386,11 @@ export default class EquationGen extends ModelReader {
       if (mode === 'decl') {
         // In decl mode, declare a static data array that will be used to create the associated `Lookup`
         // at init time. See `generateLookup` for more details.
-        const points = R.reduce((a, p) => listConcat(a, `${cdbl(p[0])}, ${cdbl(p[1])}`, true), '', Array.from(data.entries()))
+        const points = R.reduce(
+          (a, p) => listConcat(a, `${cdbl(p[0])}, ${cdbl(p[1])}`, true),
+          '',
+          Array.from(data.entries())
+        )
         return `double ${dataName}[${data.size * 2}] = { ${points} };`
       } else if (mode === 'init-lookups') {
         // In init mode, create the `Lookup`, passing in a pointer to the static data array declared in decl mode.
@@ -444,13 +466,12 @@ export default class EquationGen extends ModelReader {
     }
     return result
   }
-
-  generateDirectDataLookup(sheet, timeRowOrCol, startCell, indexNum) {
+  generateDirectDataLookup(getCellValue, timeRowOrCol, startCell, indexNum) {
     // Read a row or column of data as (time, value) pairs from the worksheet.
-    let dataCol, dataRow, dataCell, timeCol, timeRow, timeCell, nextCell
+    // The cell(c,r) function wraps data access by column and row.
+    let dataCol, dataRow, dataValue, timeCol, timeRow, timeValue, nextCell
     let lookupData = ''
     let lookupSize = 0
-    let cell = (c, r) => sheet[XLSX.utils.encode_cell({ c, r })]
     let dataAddress = XLSX.utils.decode_cell(startCell)
     dataCol = dataAddress.c
     dataRow = dataAddress.r
@@ -473,14 +494,14 @@ export default class EquationGen extends ModelReader {
         timeCol++
       }
     }
-    timeCell = cell(timeCol, timeRow)
-    dataCell = cell(dataCol, dataRow)
-    while (timeCell && dataCell) {
-      lookupData = listConcat(lookupData, `${cdbl(timeCell.v)}, ${cdbl(dataCell.v)}`, true)
+    timeValue = getCellValue(timeCol, timeRow)
+    dataValue = getCellValue(dataCol, dataRow)
+    while (timeValue != null && dataValue != null) {
+      lookupData = listConcat(lookupData, `${timeValue}, ${dataValue}`, true)
       lookupSize++
       nextCell()
-      dataCell = cell(dataCol, dataRow)
-      timeCell = cell(timeCol, timeRow)
+      dataValue = getCellValue(dataCol, dataRow)
+      timeValue = getCellValue(timeCol, timeRow)
     }
     return [`  ${this.lhs} = __new_lookup(${lookupSize}, /*copy=*/true, (double[]){ ${lookupData} });`]
   }
@@ -725,7 +746,7 @@ export default class EquationGen extends ModelReader {
         // (since Vensim indices are one-based).
         let s = this.rhsSubscriptGen([varName])
         // Remove the brackets around the C subscript expression.
-        s = s.slice(1, s.length-1)
+        s = s.slice(1, s.length - 1)
         this.emit(`(${s} + 1)`)
       }
     } else {

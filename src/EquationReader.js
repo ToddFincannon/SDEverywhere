@@ -127,13 +127,17 @@ export default class EquationReader extends ModelReader {
       this.expandDelayFunction(fn, args)
     } else if (fn === '_GET_DIRECT_DATA') {
       // Extract string constant arguments into an object used in code generation.
+      // For Excel files, the file argument names an indirect "?" file tag from the model settings.
+      // For CSV files, it gives a relative pathname in the model directory.
+      // For Excel files, the tab argument names an Excel worksheet.
+      // For CSV files, it gives the delimiter character.
       let args = R.map(
         arg => matchRegex(arg, /'(.*)'/),
         R.map(expr => expr.getText(), ctx.expr())
       )
       this.var.directDataArgs = {
-        tag: args[0],
-        sheetName: args[1],
+        file: args[0],
+        tab: args[1],
         timeRowOrCol: args[2],
         startCell: args[3]
       }

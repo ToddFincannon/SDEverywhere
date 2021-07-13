@@ -1,9 +1,17 @@
 {UTF-8}
-a[DimA] := GET DIRECT DATA('?data', 'A Data', 'A', 'B2') ~~|
 DimA: A1, A2 ~~|
-b[DimA] = a[DimA] * 10 ~~|
+
+a[DimA] := GET DIRECT DATA('?data', 'A Data', 'A', 'B2') ~~|
+b[DimA] = a[DimA] * 10 ~~~:SUPPLEMENTARY|
+
 c:= GET DIRECT DATA('?data', 'C Data', 'A', 'B2') ~~|
-d = c * 10 ~~|
+d = c * 10 ~~~:SUPPLEMENTARY|
+
+e[DimA] := GET DIRECT DATA('e_data.csv', ',', 'A', 'B2') ~~|
+f[DimA] = e[DimA] * 10 ~~~:SUPPLEMENTARY|
+
+g:= GET DIRECT DATA('g_data.csv', ',', 'A', 'B2') ~~|
+h = g * 10 ~~~:SUPPLEMENTARY|
 
 ********************************************************
 	.Control

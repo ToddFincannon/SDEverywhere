@@ -105,11 +105,13 @@ export default class SubscriptRangeReader extends ModelReader {
     }
     // Read subscript names from the CSV file at the given position.
     let data = readCsv(pathname, delimiter)
-    let indexName = data[row][col]
-    while (indexName != null) {
-      this.indNames.push(indexName)
-      nextCell()
-      indexName = data[row] != null ? data[row][col] : null
+    if (data) {
+      let indexName = data[row][col]
+      while (indexName != null) {
+        this.indNames.push(indexName)
+        nextCell()
+        indexName = data[row] != null ? data[row][col] : null
+      }
     }
     super.visitExprList(ctx)
   }
