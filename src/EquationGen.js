@@ -99,6 +99,10 @@ export default class EquationGen extends ModelReader {
     }
     // Show the model var as a comment for reference.
     this.comments.push(`  // ${this.var.modelLHS} = ${this.var.modelFormula.replace('\n', '')}`)
+    // Emit direct constants individually without separating them first.
+    if (this.var.directConstArgs) {
+      return this.generateDirectConstInit()
+    }
     // Initialize array variables with dimensions in a loop for each dimension.
     let dimNames = dimensionNames(this.var.subscripts)
     // Turn each dimension name into a loop with a loop index variable.
@@ -124,7 +128,12 @@ export default class EquationGen extends ModelReader {
       R.map(dimName => `  }`, dimNames)
     )
     // Assemble code from each channel into final var code output.
-    return this.comments.concat(this.subscriptLoopOpeningCode, this.tmpVarCode, formula, this.subscriptLoopClosingCode)
+    return this.comments.concat(
+      this.subscriptLoopOpeningCode,
+      this.tmpVarCode,
+      formula,
+      this.subscriptLoopClosingCode
+    )
   }
   //
   // Helpers
@@ -245,7 +254,9 @@ export default class EquationGen extends ModelReader {
           }
           // See if we need to apply a mapping because the RHS dim is not found on the LHS.
           try {
-            let found = this.var.subscripts.findIndex(lhsSub => sub(lhsSub).family === sub(rhsSub).family)
+            let found = this.var.subscripts.findIndex(
+              lhsSub => sub(lhsSub).family === sub(rhsSub).family
+            )
             if (found < 0) {
               // Find the  mapping from the RHS subscript to a LHS subscript.
               for (let lhsSub of this.var.subscripts) {
@@ -301,6 +312,13 @@ export default class EquationGen extends ModelReader {
     // Emit the tmp var subscript just after emitting the tmp var elsewhere.
     this.emit(`[${this.vsoTmpDimName}[${i}]]`)
   }
+  directConstSubscriptGen(subscripts) {
+    // Construct numeric constant variable subscripts in normal order.
+    let cSubscripts = subscripts.map(s => (isDimension(s) ? sub(s).value : [s]))
+    let indexSubscripts = cartesianProductOf(cSubscripts)
+    let numericSubscripts = indexSubscripts.map(idx => idx.map(s => sub(s).value))
+    return numericSubscripts.map(s => s.reduce((a, v) => a.concat(`[${v}]`), ''))
+  }
   functionIsLookup() {
     // See if the function name in the current call is actually a lookup.
     // console.error(`isLookup ${this.lookupName()}`);
@@ -316,12 +334,18 @@ export default class EquationGen extends ModelReader {
       // at init time. Using static arrays is better for code size, helps us avoid creating a copy of
       // the data in memory, and seems to perform much better when compiled to wasm when compared to the
       // previous approach that used varargs + copying, especially on constrained (e.g. iOS) devices.
-      let data = R.reduce((a, p) => listConcat(a, `${cdbl(p[0])}, ${cdbl(p[1])}`, true), '', this.var.points)
+      let data = R.reduce(
+        (a, p) => listConcat(a, `${cdbl(p[0])}, ${cdbl(p[1])}`, true),
+        '',
+        this.var.points
+      )
       return [`double ${dataName}[${this.var.points.length * 2}] = { ${data} };`]
     } else if (this.mode === 'init-lookups') {
       // In init mode, create the `Lookup`, passing in a pointer to the static data array declared earlier.
       // TODO: Make use of the lookup range
-      return [`  ${this.lhs} = __new_lookup(${this.var.points.length}, /*copy=*/false, ${dataName});`]
+      return [
+        `  ${this.lhs} = __new_lookup(${this.var.points.length}, /*copy=*/false, ${dataName});`
+      ]
     } else {
       return []
     }
@@ -370,7 +394,93 @@ export default class EquationGen extends ModelReader {
     }
     return result
   }
-
+  generateDirectDataLookup(getCellValue, timeRowOrCol, startCell, indexNum) {
+    // Read a row or column of data as (time, value) pairs from the worksheet.
+    // The cell(c,r) function wraps data access by column and row.
+    let dataCol, dataRow, dataValue, timeCol, timeRow, timeValue, nextCell
+    let lookupData = ''
+    let lookupSize = 0
+    let dataAddress = XLSX.utils.decode_cell(startCell)
+    dataCol = dataAddress.c
+    dataRow = dataAddress.r
+    if (isNaN(parseInt(timeRowOrCol))) {
+      // Time values are in a column.
+      timeCol = XLSX.utils.decode_col(timeRowOrCol)
+      timeRow = dataRow
+      dataCol += indexNum
+      nextCell = () => {
+        dataRow++
+        timeRow++
+      }
+    } else {
+      // Time values are in a row.
+      timeCol = dataCol
+      timeRow = XLSX.utils.decode_row(timeRowOrCol)
+      dataRow += indexNum
+      nextCell = () => {
+        dataCol++
+        timeCol++
+      }
+    }
+    timeValue = getCellValue(timeCol, timeRow)
+    dataValue = getCellValue(dataCol, dataRow)
+    while (timeValue != null && dataValue != null) {
+      lookupData = listConcat(lookupData, `${timeValue}, ${dataValue}`, true)
+      lookupSize++
+      nextCell()
+      dataValue = getCellValue(dataCol, dataRow)
+      timeValue = getCellValue(timeCol, timeRow)
+    }
+    return [
+      `  ${this.lhs} = __new_lookup(${lookupSize}, /*copy=*/true, (double[]){ ${lookupData} });`
+    ]
+  }
+  generateDirectConstInit() {
+    // Map zero, one, or two dimensions on the LHS in model order to a table of numbers in a CSV file.
+    let result = this.comments
+    let { file, tab, startCell } = this.var.directConstArgs
+    let data = readCsv(file, tab)
+    if (data) {
+      let getCellValue = (c, r) => (data[r] != null && data[r][c] != null ? cdbl(data[r][c]) : null)
+      let modelLHSReader = new ModelLHSReader()
+      modelLHSReader.read(this.var.modelLHS)
+      // Get C subscripts in text form for the LHS in normal order.
+      let lhsSubscripts = this.directConstSubscriptGen(this.var.subscripts)
+      // Generate cell offsets for the data table corresponding to each LHS subscript.
+      let dimNames = this.var.subscripts.filter(s => isDimension(s))
+      let inds = dimNames.map(dim => [...Array(sub(dim).size).keys()])
+      // Add a second dimension if necessary to get row, column pairs.
+      if (inds.length === 1) {
+        inds.unshift([0])
+      }
+      // Read values by column first when the start cell ends with an asterisk.
+      // Ref: https://www.vensim.com/documentation/fn_get_direct_constants.html
+      if (startCell.endsWith('*')) {
+        inds.reverse()
+        startCell = startCell.slice(0, -1)
+      }
+      // If there are two data dimensions and the model order differs from normal order, transpose them.
+      if (dimNames.length > 1) {
+        let modelDimNames = modelLHSReader.modelSubscripts.filter(s => isDimension(s))
+        if (dimNames[0] !== modelDimNames[0]) {
+          inds.reverse()
+        }
+      }
+      // Read CSV data into an indexed variable for each cell.
+      let cellOffsets = cartesianProductOf(inds)
+      let dataAddress = XLSX.utils.decode_cell(startCell)
+      let startCol = dataAddress.c
+      let startRow = dataAddress.r
+      for (let i = 0; i < cellOffsets.length; i++) {
+        let rowOffset = cellOffsets[i][0] ? cellOffsets[i][0] : 0
+        let colOffset = cellOffsets[i][1] ? cellOffsets[i][1] : 0
+        let dataValue = getCellValue(startCol + colOffset, startRow + rowOffset)
+        let lhs = `${this.var.varName}${lhsSubscripts[i] || ''}`
+        result.push(`  ${lhs} = ${dataValue};`)
+      }
+    }
+    return result
+  }
   generateExternalDataInit() {
     // If there is external data for this variable, copy it from an external file to a lookup.
     // Just like in generateLookup(), we declare static arrays to hold the data points in the first pass
@@ -424,7 +534,9 @@ export default class EquationGen extends ModelReader {
       // We don't yet handle the case where there are more than one subscript or a mix of
       // subscripts and dimensions
       // TODO: Remove this restriction
-      throw new Error(`ERROR: Data variable ${this.var.varName} has >= 2 subscripts; not yet handled`)
+      throw new Error(
+        `ERROR: Data variable ${this.var.varName} has >= 2 subscripts; not yet handled`
+      )
     }
 
     // At this point, we know that we have one or more dimensions; compute all combinations
@@ -465,45 +577,6 @@ export default class EquationGen extends ModelReader {
       }
     }
     return result
-  }
-  generateDirectDataLookup(getCellValue, timeRowOrCol, startCell, indexNum) {
-    // Read a row or column of data as (time, value) pairs from the worksheet.
-    // The cell(c,r) function wraps data access by column and row.
-    let dataCol, dataRow, dataValue, timeCol, timeRow, timeValue, nextCell
-    let lookupData = ''
-    let lookupSize = 0
-    let dataAddress = XLSX.utils.decode_cell(startCell)
-    dataCol = dataAddress.c
-    dataRow = dataAddress.r
-    if (isNaN(parseInt(timeRowOrCol))) {
-      // Time values are in a column.
-      timeCol = XLSX.utils.decode_col(timeRowOrCol)
-      timeRow = dataRow
-      dataCol += indexNum
-      nextCell = () => {
-        dataRow++
-        timeRow++
-      }
-    } else {
-      // Time values are in a row.
-      timeCol = dataCol
-      timeRow = XLSX.utils.decode_row(timeRowOrCol)
-      dataRow += indexNum
-      nextCell = () => {
-        dataCol++
-        timeCol++
-      }
-    }
-    timeValue = getCellValue(timeCol, timeRow)
-    dataValue = getCellValue(dataCol, dataRow)
-    while (timeValue != null && dataValue != null) {
-      lookupData = listConcat(lookupData, `${timeValue}, ${dataValue}`, true)
-      lookupSize++
-      nextCell()
-      dataValue = getCellValue(dataCol, dataRow)
-      timeValue = getCellValue(timeCol, timeRow)
-    }
-    return [`  ${this.lhs} = __new_lookup(${lookupSize}, /*copy=*/true, (double[]){ ${lookupData} });`]
   }
   //
   // Visitor callbacks

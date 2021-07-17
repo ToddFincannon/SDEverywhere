@@ -14,6 +14,7 @@ export default class ModelLHSReader extends ModelReader {
     super()
     this.varName = ''
     this.modelLHSList = []
+    this.modelSubscripts = []
   }
   read(modelLHS) {
     // Parse a model LHS and return the var name without subscripts.
@@ -44,6 +45,7 @@ export default class ModelLHSReader extends ModelReader {
     // Construct the modelLHSList array with the LHS expanded into an entry for each index
     // in the same format as Vensim log files.
     let subscripts = R.map(id => id.getText(), ctx.Id())
+    this.modelSubscripts = subscripts.map(s => canonicalName(s))
     let modelLHSInds = dim => {
       // Construct the model indices for a dimension.
       // If the subscript range contains a dimension, expand it into index names in place.
