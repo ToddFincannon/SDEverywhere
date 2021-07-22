@@ -6,7 +6,7 @@ import { sub, allDimensions, allMappings, subscriptFamilies } from './Subscript.
 import { asort, lines, strlist, abend, mapIndexed } from './Helpers.js'
 
 export let codeGenerator = (parseTree, opts) => {
-  const { spec, operation, extData, directData } = opts
+  const { spec, operation, extData, directData, modelDirname } = opts
   // Set to 'decl', 'init-lookups', 'eval', etc depending on the section being generated.
   let mode = ''
   // Set to true to output all variables when there is no model run spec.
@@ -25,7 +25,7 @@ export let codeGenerator = (parseTree, opts) => {
     // Read variables and subscript ranges from the model parse tree.
     // This is the main entry point for code generation and is called just once.
     try {
-      Model.read(parseTree, spec, extData, directData)
+      Model.read(parseTree, spec, extData, directData, modelDirname)
       // In list mode, print variables to the console instead of generating code.
       if (operation === 'printRefIdTest') {
         Model.printRefIdTest()

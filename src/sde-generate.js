@@ -136,7 +136,7 @@ export let generate = async (model, opts) => {
     operation = 'printRefIdTest'
   }
   let parseTree = parseModel(input)
-  let code = codeGenerator(parseTree, { spec, operation, extData, directData }).generate()
+  let code = codeGenerator(parseTree, { spec, operation, extData, directData, modelDirname }).generate()
   if (opts.genc || opts.genhtml) {
     let outputPathname = path.join(buildDirname, `${modelName}.c`)
     writeOutput(outputPathname, code)

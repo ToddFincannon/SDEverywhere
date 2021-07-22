@@ -34,12 +34,12 @@ const PRINT_INIT_GRAPH = false
 const PRINT_AUX_GRAPH = false
 const PRINT_LEVEL_GRAPH = false
 
-function read(parseTree, spec, extData, directData) {
+function read(parseTree, spec, extData, directData, modelDirname) {
   // Some arrays need to be separated into variables with individual indices to
   // prevent eval cycles. They are manually added to the spec file.
   let specialSeparationDims = spec.specialSeparationDims
   // Subscript ranges must be defined before reading variables that use them.
-  readSubscriptRanges(parseTree, spec.dimensionFamilies, spec.indexFamilies)
+  readSubscriptRanges(parseTree, spec.dimensionFamilies, spec.indexFamilies, modelDirname)
   // Read variables from the model parse tree.
   readVariables(parseTree, specialSeparationDims, directData)
   // Analyze model equations to fill in more details about variables.
@@ -49,9 +49,9 @@ function read(parseTree, spec, extData, directData) {
   // Remove variables that are not referenced by an input or output variable.
   removeUnusedVariables(spec)
 }
-function readSubscriptRanges(tree, dimensionFamilies, indexFamilies) {
+function readSubscriptRanges(tree, dimensionFamilies, indexFamilies, modelDirname) {
   // Read subscript ranges from the model.
-  let subscriptRangeReader = new SubscriptRangeReader()
+  let subscriptRangeReader = new SubscriptRangeReader(modelDirname)
   subscriptRangeReader.visitModel(tree)
   let allDims = allDimensions()
 

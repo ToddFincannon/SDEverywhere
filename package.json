@@ -19,7 +19,7 @@
   },
   "dependencies": {
     "antlr4": "4.9.2",
-    "antlr4-vensim": "https://github.com/climateinteractive/antlr4-vensim#a1d8e0b",
+    "antlr4-vensim": "https://github.com/climateinteractive/antlr4-vensim#d54738d",
     "bufx": "^1.0.5",
     "byline": "^5.0.0",
     "chart.js": "^2.9.4",

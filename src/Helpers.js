@@ -6,6 +6,7 @@ import sh from 'shelljs'
 import split from 'split-string'
 import byline from 'byline'
 import XLSX from 'xlsx'
+import parseCsv from 'csv-parse/lib/sync.js'
 import B from 'bufx'
 
 // Set true to print a stack trace in vlog
@@ -237,7 +238,7 @@ export let modelPathProps = model => {
   return {
     modelDirname: p.dir,
     modelName: p.name,
-    modelPathname: path.format(p),
+    modelPathname: path.format(p)
   }
 }
 export let execCmd = cmd => {
@@ -293,7 +294,9 @@ export let readDat = async (pathname, prefix = '') => {
         if (Number.isNaN(t)) {
           console.error(`DAT file ${pathname}:${lineNum} time value is NaN`)
         } else if (Number.isNaN(value)) {
-          console.error(`DAT file ${pathname}:${lineNum} var "${varName}" value is NaN at time=${t}`)
+          console.error(
+            `DAT file ${pathname}:${lineNum} var "${varName}" value is NaN at time=${t}`
+          )
         } else {
           varValues.set(t, value)
         }
@@ -309,6 +312,26 @@ export let readDat = async (pathname, prefix = '') => {
 }
 export let readXlsx = pathname => {
   return XLSX.readFile(pathname, { cellDates: true })
+}
+export let readCsv = (pathname, delimiter = ',') => {
+  // Read the CSV file at the pathname and parse it with the given delimiter.
+  // Return an array of rows that are each an array of columns.
+  // If there is a header row, it is returned as the first row.
+  let result = null
+  const CSV_PARSE_OPTS = {
+    delimiter,
+    columns: false,
+    trim: true,
+    skip_empty_lines: true,
+    skip_lines_with_empty_values: true
+  }
+  try {
+    let data = B.read(pathname)
+    result = parseCsv(data, CSV_PARSE_OPTS)
+  } catch (error) {
+    console.error(`ERROR: CSV file ${pathname} not found`)
+  }
+  return result
 }
 // Convert the var name and subscript names to canonical form separately.
 export let canonicalVensimName = vname => {
@@ -334,7 +357,9 @@ export let mapIndexed = R.addIndex(R.map)
 // Function to sort an array of strings
 export let asort = R.sort((a, b) => (a > b ? 1 : a < b ? -1 : 0))
 // Function to alpha sort an array of variables on the model LHS
-export let vsort = R.sort((a, b) => (a.modelLHS > b.modelLHS ? 1 : a.modelLHS < b.modelLHS ? -1 : 0))
+export let vsort = R.sort((a, b) =>
+  a.modelLHS > b.modelLHS ? 1 : a.modelLHS < b.modelLHS ? -1 : 0
+)
 // Function to list an array to stderr
 export let printArray = R.forEach(x => console.error(x))
 // Function to expand an array of strings into a comma-delimited list of strings
@@ -407,13 +432,14 @@ export let replaceDelimitedStrings = (str, open, close, newStr) => {
  * This can be used in place of nested for loops and has the benefit of working
  * for multi-dimensional inputs.
  */
- export const cartesianProductOf = arr => {
+export const cartesianProductOf = arr => {
   // Implementation based on: https://stackoverflow.com/a/36234242
-  return arr.reduce((a, b) => {
-    return a
-      .map(x => b.map(y => x.concat([y])))
-      .reduce((v, w) => v.concat(w), [])
-  }, [[]])
+  return arr.reduce(
+    (a, b) => {
+      return a.map(x => b.map(y => x.concat([y]))).reduce((v, w) => v.concat(w), [])
+    },
+    [[]]
+  )
 }
 
 /**
@@ -424,14 +450,14 @@ export let replaceDelimitedStrings = (str, open, close, newStr) => {
  * this function will return all the permutations, e.g.:
  *   [ [1,2,3], [1,3,2], [2,1,3], [2,3,1], [3,1,2], [3,2,1] ]
  */
- export const permutationsOf = (elems, subperms = [[]]) => {
+export const permutationsOf = (elems, subperms = [[]]) => {
   // Implementation based on: https://gist.github.com/CrossEye/f7c2f77f7db7a94af209
-  return R.isEmpty(elems) ?
-    subperms :
-    R.addIndex(R.chain)((elem, idx) => permutationsOf(
-      R.remove(idx, 1, elems),
-      R.map(R.append(elem), subperms)
-    ), elems)
+  return R.isEmpty(elems)
+    ? subperms
+    : R.addIndex(R.chain)(
+        (elem, idx) => permutationsOf(R.remove(idx, 1, elems), R.map(R.append(elem), subperms)),
+        elems
+      )
 }
 
 //
