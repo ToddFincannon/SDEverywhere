@@ -11,6 +11,7 @@ import EquationReader from './EquationReader.js'
 import Variable from './Variable.js'
 import {
   addIndex,
+  allAliases,
   allDimensions,
   indexNamesForSubscript,
   isDimension,
@@ -54,21 +55,33 @@ function readSubscriptRanges(tree, dimensionFamilies, indexFamilies, modelDirnam
   let subscriptRangeReader = new SubscriptRangeReader(modelDirname)
   subscriptRangeReader.visitModel(tree)
   let allDims = allDimensions()
-
   // Expand dimensions that appeared in subscript range definitions into indices.
   // Repeat until there are only indices in dimension values.
   let dimFoundInValue
   do {
     dimFoundInValue = false
     for (let dim of allDims) {
-      let value = R.flatten(R.map(subscript => (isDimension(subscript) ? sub(subscript).value : subscript), dim.value))
-      if (!R.equals(value, dim.value)) {
-        dimFoundInValue = true
-        dim.value = value
-        dim.size = value.length
+      if (dim.value !== '') {
+        let value = R.flatten(R.map(subscript => (isDimension(subscript) ? sub(subscript).value : subscript), dim.value))
+        if (!R.equals(value, dim.value)) {
+          dimFoundInValue = true
+          dim.value = value
+          dim.size = value.length
+        }
       }
     }
   } while (dimFoundInValue)
+
+  // Fill in subscript aliases from their model families.
+  for (let dim of allAliases()) {
+    if (dim.value === '') {
+      let refDim = sub(dim.family)
+      dim.value = refDim.value
+      dim.size = refDim.size
+      dim.modelValue = refDim.modelValue
+      allDims.push(dim)
+    }
+  }
 
   // Update the families of dimensions. At this point, all dimensions have their family
   // provisionally set to their own dimension name.
@@ -97,7 +110,10 @@ function readSubscriptRanges(tree, dimensionFamilies, indexFamilies, modelDirnam
       // first in alpha sort order, by convention.
       // Take the first index in the dimension.
       let index = dim.value[0]
-      let familyDims = R.sort(dimComparator, R.filter(thisDim => R.contains(index, thisDim.value), allDims))
+      let familyDims = R.sort(
+        dimComparator,
+        R.filter(thisDim => R.contains(index, thisDim.value), allDims)
+      )
       if (familyDims.length > 0) {
         dim.family = R.last(familyDims).name
       } else {
@@ -140,9 +156,7 @@ function readSubscriptRanges(tree, dimensionFamilies, indexFamilies, modelDirnam
             invertedMappingValue[toIndNumber] = fromIndName
           } else {
             console.error(
-              `ERROR: map-to index "${toSubName}" not found when mapping from dimension "${
-                fromDim.name
-              }" index "${fromIndName}"`
+              `ERROR: map-to index "${toSubName}" not found when mapping from dimension "${fromDim.name}" index "${fromIndName}"`
             )
           }
         }
@@ -467,7 +481,6 @@ function initVars() {
   return sortInitVars()
 }
 function varWithRefId(refId) {
-
   const findVarWithRefId = rid => {
     // First see if we have a map key where ref id matches the var name
     let varsForName = variablesByName.get(rid)
@@ -687,7 +700,10 @@ function sortVarsOfType(varType) {
   }
 
   // Turn the dependency-sorted var name list into a var list.
-  let sortedVars = varsOfType(varType, R.map(refId => varWithRefId(refId), deps))
+  let sortedVars = varsOfType(
+    varType,
+    R.map(refId => varWithRefId(refId), deps)
+  )
 
   // Add the ref ids to a set for faster lookup in the next step
   const sortedVarRefIds = new Set()
@@ -788,7 +804,10 @@ function sortInitVars() {
   let sortedVars = R.map(refId => varWithRefId(refId), deps)
 
   // Filter out vars with constant values.
-  sortedVars = R.reject(R.propSatisfies(varType => varType === 'const' || varType === 'lookup', 'varType'), sortedVars)
+  sortedVars = R.reject(
+    R.propSatisfies(varType => varType === 'const' || varType === 'lookup', 'varType'),
+    sortedVars
+  )
 
   // Add the ref ids to a set for faster lookup in the next step
   const sortedVarRefIds = new Set()
@@ -834,7 +853,10 @@ function printVarList() {
 }
 function yamlVarList() {
   // Print selected properties of all variable objects to a YAML string.
-  let vars = R.sortBy(R.prop('refId'), R.map(v => filterVar(v), variables))
+  let vars = R.sortBy(
+    R.prop('refId'),
+    R.map(v => filterVar(v), variables)
+  )
   return yaml.safeDump(vars)
 }
 function printVar(v) {

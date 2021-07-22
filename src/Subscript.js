@@ -36,6 +36,8 @@ import { canonicalName, asort, vlog } from './Helpers.js'
 //   sets a subscript dimension and its indices
 // Subscript(modelName, modelValue, modelFamily) with modelValue as number
 //   sets a subscript element and its index value in the subscript family
+// Subscript(modelName, '', modelFamily, [])
+//   sets modelName as an alias for the dimension named as modelFamily
 //
 // Call Subscript with an array of subscript indices to establish a dimension.
 // If there is a mapping to another dimension, give modelMappings in the call.
@@ -53,14 +55,19 @@ export function Subscript(modelName, modelValue = null, modelFamily = null, mode
     // Look up a subscript by its model name.
     return sub(name)
   }
-  // Map the subscript value array into canonical form.
   let value, size
   if (Array.isArray(modelValue)) {
+    // Map the subscript value array into canonical form.
     value = R.map(x => canonicalName(x), modelValue)
     size = value.length
   } else if (typeof modelValue === 'number') {
+    // The value is an index.
     value = modelValue
     size = 1
+  } else if (modelValue === '') {
+    // An empty value string indicates a subscript alias given by the modelFamily.
+    value = ''
+    size = 0
   }
   // Convert the model family into canonical form.
   if (modelFamily === null) {
@@ -233,6 +240,10 @@ export function allSubscripts() {
 export function allDimensions() {
   // Return an array of all dimension subscript objects.
   return R.filter(subscript => Array.isArray(subscript.value), allSubscripts())
+}
+export function allAliases() {
+  // Return an array of all subscript aliases.
+  return R.filter(subscript => subscript.value === '', allSubscripts())
 }
 export function allMappings() {
   // Return an array of all subscript mappings as objects.

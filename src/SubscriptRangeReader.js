@@ -28,16 +28,23 @@ export default class SubscriptRangeReader extends ModelReader {
     // When entering a new subscript range definition, reset the properties that will be filled in.
     this.indNames = []
     this.modelMappings = []
-    // All subscript ranges have a dimension name.
-    let modelName = ctx.Id().getText()
-    // Visit children to fill in the subscript range definition.
-    super.visitSubscriptRange(ctx)
-    // Create a new subscript range definition from Vensim-format names.
-    // The family is provisionally set to the dimension name.
-    // It will be updated to the maximal dimension if this is a subdimension.
-    // The mapping value contains dimensions and indices in the toDim.
-    // It will be expanded and inverted to fromDim indices later.
-    Subscript(modelName, this.indNames, modelName, this.modelMappings)
+    // A subscript alias has two Ids, while a regular subscript range definition has just one.
+    if (ctx.Id().length === 1) {
+      // Subscript range definitions have a dimension name.
+      let modelName = ctx.Id()[0].getText()
+      // Visit children to fill in the subscript range definition.
+      super.visitSubscriptRange(ctx)
+      // Create a new subscript range definition from Vensim-format names.
+      // The family is provisionally set to the dimension name.
+      // It will be updated to the maximal dimension if this is a subdimension.
+      // The mapping value contains dimensions and indices in the toDim.
+      // It will be expanded and inverted to fromDim indices later.
+      Subscript(modelName, this.indNames, modelName, this.modelMappings)
+    } else {
+      let modelName = ctx.Id()[0].getText()
+      let modelFamily = ctx.Id()[1].getText()
+      Subscript(modelName, '', modelFamily, [])
+    }
   }
   visitSubscriptList(ctx) {
     // A subscript list can appear in either a subscript range or mapping.

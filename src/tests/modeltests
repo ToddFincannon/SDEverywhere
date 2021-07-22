@@ -2,8 +2,8 @@
 
 set -e # fail on error
 
-# Use the local sde command.
-SDE='node ../sde.js'
+# Use the local sde command relative to the model directory.
+SDE='node ../../src/sde.js'
 $SDE -v &>/dev/null
 if [[ $? -ne 0 ]]; then
   echo 'SDEverywhere is not installed.'
@@ -15,6 +15,7 @@ function test {
   MODEL=$1
   echo "Testing the $MODEL model"
   MODEL_DIR=../../models/$MODEL
+  pushd $MODEL_DIR >/dev/null
 
   # Clean up before
   $SDE clean --modeldir $MODEL_DIR
@@ -39,6 +40,7 @@ function test {
 
   # Clean up after
   $SDE clean --modeldir $MODEL_DIR
+  popd >/dev/null
 
   echo
 }
