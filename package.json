@@ -35,7 +35,7 @@
     "ramda": "^0.27.0",
     "shelljs": "^0.8.3",
     "split-string": "^6.0.0",
-    "xlsx": "^0.15.6",
+    "xlsx": "^0.17.0",
     "yargs": "^15.3.1"
   },
   "preferGlobal": true,
