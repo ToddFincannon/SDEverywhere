@@ -253,7 +253,7 @@ ${postStep}
     let a = R.map(indexName => sub(indexName).value, indices)
     return strlist(a)
   }
-  function expandedVarNames(vensimNames) {
+  function expandedVarNames(vensimNames = false) {
     // Return a list of var names for all variables except lookups and data variables.
     // The names are in Vensim format if vensimNames is true, otherwise they are in C format.
     // Expand subscripted vars into separate var names with each index.

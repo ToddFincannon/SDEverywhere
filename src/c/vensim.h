@@ -26,6 +26,8 @@ extern "C" {
 #define _MAX(a, b) fmax(a, b)
 #define _MIN(a, b) fmin(a, b)
 #define _MODULO(a, b) fmod(a, b)
+#define _QUANTUM(a, b) (b <= 0 ? a : b * trunc(a / b))
+
 #define _SAMPLE_IF_TRUE(current, condition, input) (bool_cond(condition) ? (input) : (current))
 #define _SIN(x) sin(x)
 #define _SQRT(x) sqrt(x)

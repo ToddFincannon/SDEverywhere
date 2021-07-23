@@ -96,6 +96,8 @@ export default class EquationReader extends ModelReader {
       this.var.hasInitValue = true
     } else if (fn === '_GET_DIRECT_DATA') {
       this.var.varType = 'data'
+    } else if (fn === '_GET_DIRECT_CONSTANTS') {
+      this.var.varType = 'const'
     }
     super.visitCall(ctx)
     this.callStack.pop()
@@ -140,6 +142,19 @@ export default class EquationReader extends ModelReader {
         tab: args[1],
         timeRowOrCol: args[2],
         startCell: args[3]
+      }
+    } else if (fn === '_GET_DIRECT_CONSTANTS') {
+      // Extract string constant arguments into an object used in code generation.
+      // The file argument gives a relative pathname in the model directory.
+      // The tab argument gives the delimiter character.
+      let args = R.map(
+        arg => matchRegex(arg, /'(.*)'/),
+        R.map(expr => expr.getText(), ctx.expr())
+      )
+      this.var.directConstArgs = {
+        file: args[0],
+        tab: args[1],
+        startCell: args[2]
       }
     } else {
       // Keep track of all function names referenced in this expression.  Note that lookup
